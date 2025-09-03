@@ -1,10 +1,10 @@
 import sqlite3
 import re
 import os
+from datetime import datetime
 import json
 from openai import OpenAI
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
 
 DB_NAME = 'receipts.db'
 
@@ -214,6 +214,12 @@ def text_to_sql(user_input: str) -> str:
                             
                             +
                             """
+                            The date today is:
+                            """
+                            +
+                            str(datetime.now())
+                            +
+                            """
                             **Edge Cases & Considerations:**
 
                             - If the request is ambiguous, call out ambiguities in your reasoning.
@@ -254,7 +260,7 @@ def text_to_sql(user_input: str) -> str:
 
     return sql_query
 
-def execute_query(query: str) -> str:
+def execute_query(query: str) -> dict:
     try:
         print(f"User query: '{query}'")
         sql_query = text_to_sql(query)
@@ -271,29 +277,31 @@ def execute_query(query: str) -> str:
                 results = cursor.fetchall()
 
                 if not results:
-                    return "Query executed, but no results were found."
+                    return {"status": "success", "message": "Query executed, but no results were found.", "original_query": query, "sql_query": sql_query}
 
                 column_names = [description[0] for description in cursor.description]
                 
                 # Format as a list of dictionaries for JSON output
                 json_results = [dict(zip(column_names, row)) for row in results]
                 json_return = {
-                    "result" : json_results,
-                    "original_query" : query,
-                    "sql_query" : sql_query
+                    "status": "success",
+                    "result": json_results,
+                    "original_query": query,
+                    "sql_query": sql_query
                 }
-                return jsonify(json_return)
+                return json_return
 
             else:
                 cursor.executescript(sql_query)
                 conn.commit()
-                return jsonify({"status": "success",  "original_query": query, "sql_query": sql_query, "message": "Action completed successfully. The database has been updated."})
+                return {"status": "success", "original_query": query, "sql_query": sql_query, "message": "Action completed successfully. The database has been updated."}
 
         except sqlite3.Error as e:
-            return jsonify({"status": "error", "original_query": query, "sql_query": sql_query, "message": f"A database error occurred: {e}"}), 500
+            return {"status": "error", "original_query": query, "sql_query": sql_query, "message": f"A database error occurred: {e}"}
         finally:
             if conn:
                 conn.close()
 
     except Exception as e:
-        return jsonify({"status": "error", "original_query": query, "message": f"An unexpected error occurred: {e}"}), 500
+        return {"status": "error", "original_query": query, "message": f"An unexpected error occurred: {e}"}
+
