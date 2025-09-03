@@ -1,0 +1,9 @@
+**Big Data Approach**
+
+There are several approaches that can be done for EDA with large data, the scale of the data also has an influence for example, data 2M used in number 2 may not be enough if using plain pandas, alternative other solutions:
+
+1. Use optimized pandas approach for big data, e.g. increase vectorized operation instead of row wise operation (Approach that I will use)
+2. (Approach that I will use) Use library that natively supports big data in local machine, this is what I usually use, duckdb, columnardb but local based like sqlite, easy to use, does not use up memory
+3. Use spark / hadoop / other big data solutions, which perform map reduce operations, for divide and conquer approach (overkill)
+
+I will use approach number 2, simpler, easy to use, similar impact, middle of the road option

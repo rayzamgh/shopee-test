@@ -1,0 +1,3 @@
+*.env
+
+src/123_coding_test/data/*.csv
