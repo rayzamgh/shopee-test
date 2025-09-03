@@ -1,18 +1,72 @@
 import sqlite3
 import re
 import os
+from datetime import datetime
 import json
 from openai import OpenAI
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
 
-app = Flask(__name__)
 DB_NAME = 'receipts.db'
 
 load_dotenv()
 
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def extract_receipt_data_from_image(base64_image: str) -> dict:
+    try:
+        prompt_text = """
+        You are an intelligent receipt processing assistant. Your task is to analyze the
+        provided image of a food receipt and extract the following information:
+        - store_name: The name of the store or restaurant.
+        - total_cost: The final total amount paid. This should be a number.
+        - purchase_date: The date of the purchase in YYYY-MM-DD format.
+        - items: A list of all purchased items, where each item is an object
+          with 'item_name' and 'item_cost'.
+
+        Please return the result ONLY in a valid JSON format, like this example:
+        {
+          "store_name": "Dunkin Cafe",
+          "total_cost": 60000,
+          "purchase_date": "2025-09-03",
+          "items": [
+            { "item_name": "Latte", "item_cost": 25000 },
+            { "item_name": "Croissant", "item_cost": 35000 }
+          ]
+        }
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            },
+                        },
+                    ],
+                }
+            ]
+        )
+
+        json_string = response.choices[0].message.content
+        cleaned_json_string = re.sub(r'```json\n|\n```', '', json_string).strip()
+    
+        data = json.loads(cleaned_json_string)
+        return data
+
+    except json.JSONDecodeError as e:
+        print(f"JSON Parsing Error: {e}")
+        print(f"API : {json_string}")
+        raise ValueError("Failed to parse JSON from AI response.")
+    except Exception as e:
+        print(f"Error OpenAI API: {e}")
+        raise
 
 
 def get_all_restaurant_names(db_path = DB_NAME):
@@ -160,6 +214,12 @@ def text_to_sql(user_input: str) -> str:
                             
                             +
                             """
+                            The date today is:
+                            """
+                            +
+                            str(datetime.now())
+                            +
+                            """
                             **Edge Cases & Considerations:**
 
                             - If the request is ambiguous, call out ambiguities in your reasoning.
@@ -200,9 +260,7 @@ def text_to_sql(user_input: str) -> str:
 
     return sql_query
 
-
-
-def execute_query(query: str) -> str:
+def execute_query(query: str) -> dict:
     try:
         print(f"User query: '{query}'")
         sql_query = text_to_sql(query)
@@ -219,78 +277,72 @@ def execute_query(query: str) -> str:
                 results = cursor.fetchall()
 
                 if not results:
-                    return "Query executed, but no results were found."
+                    return {"status": "success", "message": "Query executed, but no results were found.", "original_query": query, "sql_query": sql_query}
 
                 column_names = [description[0] for description in cursor.description]
                 
                 # Format as a list of dictionaries for JSON output
                 json_results = [dict(zip(column_names, row)) for row in results]
                 json_return = {
-                    "result" : json_results,
-                    "original_query" : query,
-                    "sql_query" : sql_query
+                    "status": "success",
+                    "result": json_results,
+                    "original_query": query,
+                    "sql_query": sql_query
                 }
-                return jsonify(json_return)
+                return json_return
 
             else:
                 cursor.executescript(sql_query)
                 conn.commit()
-                return jsonify({"status": "success",  "original_query": query, "sql_query": sql_query, "message": "Action completed successfully. The database has been updated."})
+                return {"status": "success", "original_query": query, "sql_query": sql_query, "message": "Action completed successfully. The database has been updated."}
 
         except sqlite3.Error as e:
-            return jsonify({"status": "error", "original_query": query, "sql_query": sql_query, "message": f"A database error occurred: {e}"}), 500
+            return {"status": "error", "original_query": query, "sql_query": sql_query, "message": f"A database error occurred: {e}"}
         finally:
             if conn:
                 conn.close()
 
     except Exception as e:
-        return jsonify({"status": "error", "original_query": query, "message": f"An unexpected error occurred: {e}"}), 500
+        return {"status": "error", "original_query": query, "message": f"An unexpected error occurred: {e}"}
 
-def create_database():
-    conn = None
+def normalize_response(user_input: str, ai_input: str) -> str:
     try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
+        prompt_text = f"""
+        You are an intelligent receipt processing assistant. Your task is to answer the users question with the provided answer from your fellow agent,
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS receipts (
-                receipt_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                store_name TEXT NOT NULL,
-                total_cost REAL NOT NULL,
-                purchase_date TEXT NOT NULL
-            )
-        ''')
-        print("Table 'receipts' created or already exists.")
+        here is the knowledge given from your fellow AI agent, the knowledge below should be able to answer the users question, because it is derived
+        from a text to sql result of the user's own questions, your job is to simply paraphrase the agents answer below: 
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS items (
-                item_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                receipt_id INTEGER,
-                item_name TEXT NOT NULL,
-                item_cost REAL NOT NULL,
-                FOREIGN KEY(receipt_id) REFERENCES receipts(receipt_id)
-            )
-        ''')
-        print("Table items created or already exists.")
-        
-        conn.commit()
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
-    finally:
-        if conn:
-            conn.close()
+        <ai_input>
+        {ai_input}
+        </ai_input>
 
+        should you however found that <ai_input> is empty, please answer the users questions appropriately, the user might be asking questions that are not
+        whose answer are not available in the data in which case try to not answer the question.
+        """
 
-@app.route('/query', methods=['POST'])
-def handle_query():
-    data = request.get_json()
-    if not data or 'query' not in data:
-        return jsonify({"status": "error", "message": "Invalid request. 'query' key is missing."}), 400
-    
-    query = data['query']
-    return execute_query(query)
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[
+                {
+                    "role": "developer",
+                    "content": [
+                        {"type": "text", "text": prompt_text}
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_input}
+                    ],
+                }
+            ]
+        )
 
-if __name__ == "__main__":
-    create_database()
-    print("Starting Flask API server.")
-    app.run(debug=True, port=5000)
+        return_text = response.choices[0].message.content
+        return return_text
+
+    except Exception as e:
+        print(f"Error OpenAI API: {e}")
+        raise
+
