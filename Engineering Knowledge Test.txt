@@ -1,0 +1,65 @@
+1. Describe differences between REST API, MCP in the context of AI.
+2. How REST API, MCP, can improve the AI use case.
+3. How do you ensure that your AI agent answers correctly?
+4. Describe what can you do with Docker / Containerize environment in the context of AI
+5. How do you finetune the LLM model from raw ?
+
+
+My Answer:
+
+1. Rest API is pretty much a standard in building a WebAPI, it provides statelessness, resource oriented URIs, cacheability, etc. 
+MCP is pretty much trying to do the same thing with AgenticAI and function calling in mind, its a standard proposed by anthropic to create
+a widely adopted format for tool function calling, before MCP, each hyperscaler has their own method, OpenAI has function call, Vertex has tools, 
+and Anthropic presents MCP, what makes it a standard worth implementing is the wide adoption of it over basically all AI services. MCP also
+offers Tight contract any MCP aware agent can talk to any MCP server without additional glue. 
+That's why tools like Claude, Replit, or GitHub copilots can all connect after a one time "MCP integration."
+
+REST is designed for WebAPI, to offer standardized security, statelessness, resource oriented transfer standard
+
+while MCP, is an aplication layer protocol, trying to offer the same standardized aproach but for Agentic AI purposes.
+
+
+2. In terms of an AI use case, we really have to circle back to the functional requirement, not every single AI usecase requries MCP implementation
+but some AgenticAI usecase which requries the agent to connect multiple tools, or even other agent may benefit significantly from it. REST API however
+holds a different stance in an AI usecase, its purpose simply is to facilitate resource transfer, meaning if the AI requires user input, or file transfer
+or authentication, then the REST API comes into play. MCP and REST API like all standards are meant to reduce technical debts. any AI implementation in the 
+future following the same standard should not require large capital investment if there are any change request. This can mean monetary benefits in reduced cost
+and also faster Go to Market timing for AI usecases.
+
+3. There are multiple aproaches to ensure an AI agents credibility, I will list them all to help you measure the effectiveness at each level of complexity. 
+The list will be ordered by the amount of investment we need to implement these aproaches
+
+    a. system prompting & config change, by far the easiest method, you basically only need to tell the AI to be accurate and not make stuff up,
+       you can also try to change some model configs, like temperature, top-k, seed, etc
+       this can be effective to some level, where you dont need the AI to give accurate data, but simply to have consistent tone
+
+    b. RAG, this next step can be boiled down to basically providing a cheat sheet to your AI, the AI is required to refer to a set of domain knowledge
+       that you provided, can be in the form of vectordb, text, pdf, images, anything the AI can consume and that you can retrieve. This ensures that the 
+       AI answers based on provided domain input, instead of having to rely on its own weight/knowledge
+
+    c. Guardrail, guardrailing is a step further, requiring multiple LLM chains to basically cross-check the validity of previous agent. 
+       you can implement this by instructing an LLM Agent to check if the previous agents answer, matches what the user wants, and what the document
+       provided by the RAG returns. This can be further enhanced by applying multiple layer of checks, effectively having multiple validators for a single output
+    
+    d. Finetuning, this is the highest available check that you may want to consider. The effect of finetuning can be double sided, as when done incorrectly
+       finetuning can backfire and instead lower the models initial accuracy. But provided that you input the correct data, and apply effective
+       finetuning method, your model can even be domain experts 
+
+4. Containerization provides stability in AI usecases, the treatment is similar to what you'll implement in a typical server. However the effect is more 
+prominent in AI usecases where you require model stability to ensure consistent answer. 
+
+other than using docker to deploy your webservice that is calling cloud available LLM
+
+A docker container can also be used to wrap an Ollama / NVIDIA Ray service, to deploy local LLM model, this ensures:
+    a. Availability to your deployed model
+    b. Load balancing service if your model is to be used by multiple applications 
+    c. Resource allocation control, to avoid overconsumption like when you deploy it in your local
+
+You shouldn't only use docker however, at minimum for a local LLM deployment you'd need docker-swarm, or better yet a kubernetes cluster
+
+5. By from raw, im assuming from a pretrained model, the common aproach to finetune an LLM is to:
+    a. Gather as much relevant data as possible, you'd want to structure the data as "question : answer" format
+    b. Ready up a lot of GPU VRAM resource, as LLM training requires a huge amount of resource to facilitate the matrix computation
+    c. Provide training framework to finetune the model, a lot of out of the box solution is available for this, you can use Ollama, OpenwebUI, LLMStudio
+       Hugging Face Transformers + Accelerate + PEFT/QLoRA. depends on how much investment you'd want to put in really. 
+    d. Execute the finetuning process, might take up to days, depending on the model size and data used 
