@@ -1,6 +1,5 @@
 import os, sqlite3, json
 import numpy as np
-from dotenv import load_dotenv
 from populatevector import embed_openai
 
 DB_FILE   = "./localvector.db"
