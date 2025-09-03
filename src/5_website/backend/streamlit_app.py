@@ -2,7 +2,7 @@ import streamlit as st
 import sqlite3
 import base64
 import pandas as pd
-from utils import extract_receipt_data_from_image, execute_query
+from utils import extract_receipt_data_from_image, execute_query, normalize_response
 from PIL import Image
 import io
 
@@ -67,7 +67,12 @@ def handle_query(query):
     if not query.strip():
         return {"status": "error", "message": "Query cannot be empty"}
     
-    return execute_query(query)
+    ai_response      = execute_query(query)
+    natural_language = normalize_response(query, ai_response)
+
+    ai_response["natural_language"] = natural_language
+    
+    return ai_response
 
 def main():
     st.set_page_config(
@@ -116,7 +121,7 @@ def main():
                     col_info1, col_info2 = st.columns(2)
                     with col_info1:
                         st.metric("Store Name", data["store_name"])
-                        st.metric("Total Cost", f"${data['total_cost']:,.2f}")
+                        st.metric("Total Cost", f"Rp{data['total_cost']:,.2f}")
                     with col_info2:
                         st.metric("Purchase Date", data["purchase_date"])
                         st.metric("Number of Items", len(data["items"]))
@@ -185,7 +190,10 @@ def main():
                         st.write(f"**Original Query:** {result['original_query']}")
                         st.write(f"**Generated SQL:** `{result['sql_query']}`")
                     
+                    
                     # Display results
+                    st.write(result["natural_language"])
+                    
                     if "result" in result and result["result"]:
                         st.subheader("Results:")
                         results_df = pd.DataFrame(result["result"])

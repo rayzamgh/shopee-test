@@ -305,3 +305,44 @@ def execute_query(query: str) -> dict:
     except Exception as e:
         return {"status": "error", "original_query": query, "message": f"An unexpected error occurred: {e}"}
 
+def normalize_response(user_input: str, ai_input: str) -> str:
+    try:
+        prompt_text = f"""
+        You are an intelligent receipt processing assistant. Your task is to answer the users question with the provided answer from your fellow agent,
+
+        here is the knowledge given from your fellow AI agent, the knowledge below should be able to answer the users question, because it is derived
+        from a text to sql result of the user's own questions, your job is to simply paraphrase the agents answer below: 
+
+        <ai_input>
+        {ai_input}
+        </ai_input>
+
+        should you however found that <ai_input> is empty, please answer the users questions appropriately, the user might be asking questions that are not
+        whose answer are not available in the data in which case try to not answer the question.
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[
+                {
+                    "role": "developer",
+                    "content": [
+                        {"type": "text", "text": prompt_text}
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_input}
+                    ],
+                }
+            ]
+        )
+
+        return_text = response.choices[0].message.content
+        return return_text
+
+    except Exception as e:
+        print(f"Error OpenAI API: {e}")
+        raise
+
